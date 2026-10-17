@@ -17,16 +17,20 @@ try:
 except Exception:
     api_key = os.getenv("GEMINI_API_KEY", "")
 
+api_key = api_key.strip() if api_key else ""
+
 if not api_key:
     st.warning(
-        "Duniya AI کو چلانے کے لیے Gemini API Key درکار ہے۔ "
-        "اسے Streamlit Secrets میں محفوظ کریں۔"
+        "Gemini API Key موجود نہیں۔ "
+        "Streamlit Settings → Secrets میں GEMINI_API_KEY شامل کریں۔"
     )
     st.stop()
 
 client = OpenAI(
     api_key=api_key,
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+    timeout=60.0,
+    max_retries=1
 )
 
 if "messages" not in st.session_state:
@@ -50,14 +54,14 @@ if prompt:
         with st.spinner("Duniya AI جواب تیار کر رہا ہے..."):
             try:
                 response = client.chat.completions.create(
-                    model="gemini-2.5-flash",
+                    model="gemini-3.8-flash",
                     messages=[
                         {
                             "role": "system",
                             "content": (
                                 "You are Duniya AI, a helpful and honest assistant. "
                                 "Reply in the language the user uses, including Urdu, "
-                                "Hindi, and English. Be clear and accurate."
+                                "Hindi, and English. Give clear, useful answers."
                             )
                         }
                     ] + st.session_state.messages,
@@ -65,6 +69,7 @@ if prompt:
                 )
 
                 answer = response.choices[0].message.content
+
                 if not answer:
                     answer = "معذرت، اس وقت جواب نہیں مل سکا۔"
 
@@ -73,8 +78,7 @@ if prompt:
                     {"role": "assistant", "content": answer}
                 )
 
-            except Exception:
-                st.error(
-                    "AI سے رابطہ نہیں ہو سکا۔ API Key، ماڈل یا سروس کی "
-                    "ترتیبات چیک کریں۔"
-                )
+            except Exception as e:
+                st.error("Duniya AI سے رابطے میں خرابی آئی ہے۔")
+                st.caption("اصل Error کی تفصیل:")
+                st.code(str(e))
