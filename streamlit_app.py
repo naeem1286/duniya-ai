@@ -325,8 +325,7 @@ if prompt:
                 )
 
                 response = client.chat.completions.create(
-                   model="gemini-2.5-flash",
-                    messages=[
+      model="gemini-3.8-flash",              messages=[
                         {
                             "role": "system",
                             "content": (
