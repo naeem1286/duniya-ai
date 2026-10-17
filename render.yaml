@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: duniya-ai
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gpt-4.1-mini
