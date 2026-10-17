@@ -10,107 +10,185 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Modern design
+# ---------- Premium design ----------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Nastaliq+Urdu&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap');
+
+:root {
+    --bg: #0b1020;
+    --panel: #111a2b;
+    --border: #283650;
+    --text: #f1f5ff;
+    --muted: #a8b4cb;
+    --blue: #82b4ff;
+    --purple: #b9a0ff;
+    --urdu: "Jameel Noori Nastaleeq", "Noto Nastaliq Urdu", serif;
+    --latin: "Inter", Arial, sans-serif;
+}
 
 .stApp {
-    background: linear-gradient(135deg, #0b1020, #111827 55%, #17132d);
-    color: #f3f4f6;
-    font-family: 'Inter', sans-serif;
+    background:
+        radial-gradient(ellipse at top, #172448 0%, transparent 48%),
+        var(--bg);
+    color: var(--text);
+    font-family: var(--latin);
+}
+
+[data-testid="stHeader"] {
+    background: rgba(11,16,32,.88);
 }
 
 [data-testid="stSidebar"] {
     background: #0a0f1c;
-    border-right: 1px solid #263047;
+    border-right: 1px solid var(--border);
 }
 
 [data-testid="stSidebar"] * {
-    color: #e5e7eb;
+    color: var(--text);
 }
 
-.hero {
+.brand {
     text-align: center;
-    padding: 48px 12px 25px 12px;
+    padding: 30px 8px 24px;
 }
 
-.logo {
-    font-size: 48px;
-    margin-bottom: 8px;
+.brand-icon {
+    font-size: 54px;
+    line-height: 1.5;
 }
 
-.hero h1 {
+.brand h1 {
+    font-family: var(--latin);
     font-size: clamp(34px, 5vw, 54px);
     font-weight: 700;
-    letter-spacing: -1px;
-    background: linear-gradient(90deg, #60a5fa, #a78bfa, #f0abfc);
+    letter-spacing: -1.5px;
+    background: linear-gradient(90deg, #7dc8ff, #b8a1ff, #f0b5ff);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 8px;
+    margin: 0;
 }
 
-.hero p {
-    color: #aab4ca;
-    font-size: 16px;
+.brand p {
+    font-family: var(--urdu);
+    font-size: 18px;
+    line-height: 2.4;
+    color: var(--muted);
+    margin-top: 12px;
+}
+
+.welcome {
+    font-family: var(--urdu);
+    direction: rtl;
+    text-align: center;
+    font-size: 23px;
+    line-height: 2.5;
+    color: #e3eaff;
+    padding: 14px 0 24px;
 }
 
 div[data-testid="stChatMessage"] {
-    background: rgba(30, 41, 59, 0.70);
-    border: 1px solid #334155;
-    border-radius: 18px;
-    padding: 16px;
-    margin-bottom: 14px;
+    background: rgba(17,26,43,.94);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 20px 22px;
+    margin: 14px 0;
+    box-shadow: 0 8px 26px rgba(0,0,0,.13);
+}
+
+div[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
+    color: var(--text);
+}
+
+div[data-testid="stChatMessage"] p,
+div[data-testid="stChatMessage"] li {
+    font-family: var(--urdu);
+    font-size: 19px;
+    font-weight: 400;
+    line-height: 2.35;
+    text-align: start;
+    unicode-bidi: plaintext;
+    overflow-wrap: anywhere;
+}
+
+div[data-testid="stChatMessage"] h1,
+div[data-testid="stChatMessage"] h2,
+div[data-testid="stChatMessage"] h3 {
+    font-family: var(--urdu);
+    color: var(--blue);
+    line-height: 2.1;
+}
+
+div[data-testid="stChatMessage"] strong {
+    color: #c6b6ff;
+    font-weight: 700;
+}
+
+div[data-testid="stChatMessage"] pre,
+div[data-testid="stChatMessage"] code {
+    font-family: Consolas, "Courier New", monospace;
+    direction: ltr;
+    text-align: left;
+    line-height: 1.7;
 }
 
 [data-testid="stChatInput"] {
-    border: 1px solid #475569;
+    border: 1px solid #425475;
     border-radius: 18px;
-    background: #111827;
+    background: #10192a;
 }
 
 [data-testid="stChatInput"] textarea {
+    font-family: var(--urdu);
+    font-size: 18px;
+    line-height: 2.2;
     color: #ffffff;
 }
 
 .stButton button {
-    border-radius: 12px;
-    border: 1px solid #475569;
-    background: linear-gradient(90deg, #2563eb, #7c3aed);
-    color: white;
-    font-weight: 600;
-    padding: 10px 14px;
-    transition: 0.2s;
+    min-height: 44px;
+    border: 1px solid #39496b;
+    border-radius: 13px;
+    color: #f4f6ff;
+    background: linear-gradient(110deg, #182d50, #29234c);
+    font-family: var(--urdu);
+    font-size: 16px;
+    transition: border-color .2s, background .2s;
 }
 
 .stButton button:hover {
-    border-color: #a78bfa;
+    border-color: #a99aff;
     color: white;
+    background: #26365a;
 }
 
-div[data-testid="stMarkdownContainer"] {
-    line-height: 1.8;
-}
-
-.urdu {
-    font-family: 'Noto Nastaliq Urdu', serif;
-    direction: rtl;
-    text-align: center;
-    color: #cbd5e1;
-    line-height: 2.3;
+[data-testid="stCaptionContainer"] {
+    color: var(--muted);
 }
 
 .footer {
     text-align: center;
-    color: #7f8ba3;
+    color: #8290a9;
+    font-family: var(--latin);
     font-size: 12px;
-    padding: 20px 0;
+    padding: 26px 8px 12px;
 }
 
+@media (max-width: 700px) {
+    .brand { padding-top: 18px; }
+    .brand p { font-size: 16px; }
+    div[data-testid="stChatMessage"] { padding: 15px; }
+    div[data-testid="stChatMessage"] p,
+    div[data-testid="stChatMessage"] li {
+        font-size: 18px;
+        line-height: 2.25;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
-# API key
+
+# ---------- API settings ----------
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except Exception:
@@ -118,81 +196,93 @@ except Exception:
 
 api_key = api_key.strip() if api_key else ""
 
-# Chat history
+# ---------- Conversation state ----------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Sidebar
+if "pending_prompt" not in st.session_state:
+    st.session_state.pending_prompt = None
+
+
+# ---------- Sidebar ----------
 with st.sidebar:
     st.markdown("## 🌍 Duniya AI")
     st.caption("آپ کا اپنا AI اسسٹنٹ")
 
     if st.button("＋  نئی چیٹ", use_container_width=True):
         st.session_state.messages = []
+        st.session_state.pending_prompt = None
         st.rerun()
 
     st.divider()
     st.markdown("### ✨ خصوصیات")
     st.markdown("""
-    - 💬 سوالات اور جوابات
-    - 🌐 اردو، ہندی اور انگریزی
-    - 💻 کوڈنگ میں مدد
-    - ✍️ لکھنے اور پڑھنے میں مدد
+    اردو، ہندی اور انگریزی میں مدد
+
+    سوالات کے جواب
+
+    لکھنے اور پڑھنے میں مدد
+
+    پروگرامنگ اور کوڈنگ
     """)
 
     st.divider()
     st.caption("Duniya AI • آپ کا ڈیجیٹل ساتھی")
 
-# Main screen
+
+# ---------- Welcome screen ----------
 if not st.session_state.messages:
     st.markdown("""
-    <div class="hero">
-        <div class="logo">🌍</div>
+    <div class="brand">
+        <div class="brand-icon">🌍</div>
         <h1>Duniya AI</h1>
         <p>آپ کا اپنا AI اسسٹنٹ — اردو، ہندی اور انگریزی میں</p>
     </div>
+    <div class="welcome">السلام علیکم! آج میں آپ کی کیا مدد کر سکتا ہوں؟</div>
     """, unsafe_allow_html=True)
 
-    st.markdown(
-        '<p class="urdu">السلام علیکم! آج میں آپ کی کیا مدد کر سکتا ہوں؟</p>',
-        unsafe_allow_html=True
-    )
+    c1, c2, c3 = st.columns(3)
 
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.button("💡 ایک نئی چیز سیکھیں", use_container_width=True):
-            st.session_state.pending_prompt = "مجھے کوئی نئی اور دلچسپ چیز آسان الفاظ میں سکھائیں۔"
+    with c1:
+        if st.button("💡 کچھ نیا سیکھیں", use_container_width=True):
+            st.session_state.pending_prompt = "مجھے کوئی نئی چیز آسان الفاظ میں سکھائیں۔"
             st.rerun()
 
-    with col2:
+    with c2:
         if st.button("✍️ لکھنے میں مدد", use_container_width=True):
-            st.session_state.pending_prompt = "مجھے لکھنے میں مدد کریں اور ایک مختصر مثال دیں۔"
+            st.session_state.pending_prompt = "مجھے لکھنے میں مدد کریں۔"
             st.rerun()
 
-    with col3:
+    with c3:
         if st.button("💻 کوڈنگ میں مدد", use_container_width=True):
             st.session_state.pending_prompt = "مجھے پروگرامنگ آسان الفاظ میں سمجھائیں۔"
             st.rerun()
 
 else:
-    st.markdown("## 💬 آپ کی گفتگو")
+    st.markdown("### 💬 گفتگو")
 
-# Show conversation
+
+# ---------- Display previous messages ----------
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# API key check
+
+# ---------- API key check ----------
 if not api_key:
-    st.warning("Gemini API Key موجود نہیں۔ Streamlit Settings → Secrets چیک کریں۔")
+    st.warning(
+        "Gemini API Key موجود نہیں۔ "
+        "Streamlit Settings → Secrets میں GEMINI_API_KEY چیک کریں۔"
+    )
     st.stop()
 
-# User input
+
+# ---------- Chat ----------
 prompt = st.chat_input("Duniya AI سے کچھ بھی پوچھیں...")
 
-if "pending_prompt" in st.session_state:
-    prompt = st.session_state.pop("pending_prompt")
+if st.session_state.pending_prompt:
+    prompt = st.session_state.pending_prompt
+    st.session_state.pending_prompt = None
 
 if prompt:
     st.session_state.messages.append(
@@ -213,14 +303,16 @@ if prompt:
                 )
 
                 response = client.chat.completions.create(
-                    model="gemini-3.8-flash",
+                    model="gemini-2.5-flash",
                     messages=[
                         {
                             "role": "system",
                             "content": (
                                 "You are Duniya AI, a helpful and honest assistant. "
-                                "Reply in the language the user uses, including Urdu, "
-                                "Hindi, and English. Give clear, useful answers."
+                                "Reply in the user's language, including Urdu, Hindi, "
+                                "and English. Use clear formatting, short paragraphs, "
+                                "helpful headings and lists when appropriate. "
+                                "For Urdu, use natural and respectful language."
                             )
                         }
                     ] + st.session_state.messages,
@@ -239,10 +331,12 @@ if prompt:
 
             except Exception as e:
                 st.error("Duniya AI سے رابطے میں مسئلہ آیا۔")
+                st.caption("خرابی کی تفصیل:")
                 st.code(str(e))
 
 st.markdown(
-    '<div class="footer">Duniya AI can make mistakes. Important information should be verified.</div>',
+    '<div class="footer">AI کے جوابات میں غلطی ممکن ہے؛ اہم معلومات کی تصدیق کریں۔</div>',
     unsafe_allow_html=True
 )
+
  
