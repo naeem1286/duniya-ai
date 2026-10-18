@@ -1,5 +1,7 @@
+
 import io
 import os
+import base64
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from google import genai
@@ -16,6 +18,7 @@ CHAT_MODEL = "gemini-3.8-flash"
 IMAGE_MODEL = "gemini-nano-banana-2.1"
 
 # ---------------- DESIGN ----------------
+# Original design, colors and font settings retained.
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu&display=swap');
@@ -89,7 +92,6 @@ h1, h2, h3, p, label, li {
     color: white !important;
 }
 
-/* Fix typing box: dark background, visible white text */
 [data-testid="stChatInput"] {
     background-color: #111827 !important;
     border: 1px solid #64748b !important;
@@ -145,31 +147,146 @@ h1, h2, h3, p, label, li {
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- API KEY ----------------
-try:
-    API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-except Exception:
-    API_KEY = os.getenv("GEMINI_API_KEY", "")
+# ---------------- API KEYS ----------------
+def get_secret(name, default=""):
+    try:
+        return st.secrets.get(name, default)
+    except Exception:
+        return os.getenv(name, default)
 
-API_KEY = API_KEY.strip() if API_KEY else ""
+API_KEY = (get_secret("GEMINI_API_KEY") or "").strip()
+SUPABASE_URL = (get_secret("SUPABASE_URL") or "").strip()
+SUPABASE_ANON_KEY = (
+    get_secret("SUPABASE_ANON_KEY") or ""
+).strip()
 
 # ---------------- SESSION STATE ----------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+defaults = {
+    "messages": [],
+    "generated_image": None,
+    "edited_image": None,
+    "supabase": None,
+    "user": None,
+    "chat_count": 0,
+    "web_count": 0,
+    "image_count": 0,
+    "auth_notice": ""
+}
 
-if "generated_image" not in st.session_state:
-    st.session_state.generated_image = None
+for key, value in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
-if "edited_image" not in st.session_state:
-    st.session_state.edited_image = None
-
-# ---------------- CLIENT ----------------
+# ---------------- CLIENTS ----------------
 def get_client():
     if not API_KEY:
         raise ValueError(
-            "GEMINI_API_KEY نہیں ملی۔ Streamlit Settings → Secrets چیک کریں۔"
+            "GEMINI_API_KEY نہیں ملی۔ "
+            "Streamlit Settings → Secrets چیک کریں۔"
         )
     return genai.Client(api_key=API_KEY)
+
+
+def get_supabase():
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        return None
+
+    if st.session_state.supabase is None:
+        from supabase import create_client
+        st.session_state.supabase = create_client(
+            SUPABASE_URL,
+            SUPABASE_ANON_KEY
+        )
+
+    return st.session_state.supabase
+
+
+def current_plan():
+    user = st.session_state.user
+
+    if user is None:
+        return "free"
+
+    metadata = getattr(user, "user_metadata", None) or {}
+
+    if metadata.get("plan") == "pro":
+        return "pro"
+
+    return "free"
+
+
+def can_use(feature):
+    # Initial per-session limits, not monthly limits.
+    limits = {
+        "free": {
+            "chat": 20,
+            "web": 10,
+            "image": 2
+        },
+        "pro": {
+            "chat": 200,
+            "web": 100,
+            "image": 30
+        }
+    }
+
+    counters = {
+        "chat": "chat_count",
+        "web": "web_count",
+        "image": "image_count"
+    }
+
+    counter = counters[feature]
+    limit = limits[current_plan()][feature]
+
+    if st.session_state[counter] >= limit:
+        st.warning(
+            f"اس سیشن میں {feature} کی حد پوری ہو گئی۔"
+        )
+        return False
+
+    return True
+
+
+def grounding_links(response):
+    """Read source links returned by Google Search grounding."""
+    links = []
+    seen = set()
+
+    try:
+        for candidate in response.candidates or []:
+            metadata = getattr(
+                candidate, "grounding_metadata", None
+            )
+
+            chunks = getattr(
+                metadata, "grounding_chunks", None
+            ) if metadata else None
+
+            for chunk in chunks or []:
+                web_item = getattr(chunk, "web", None)
+
+                if not web_item:
+                    continue
+
+                url = getattr(web_item, "uri", None)
+                title = getattr(web_item, "title", None)
+
+                if url and url not in seen:
+                    links.append((title or url, url))
+                    seen.add(url)
+
+    except Exception:
+        pass
+
+    return links
+
+
+def show_sources(links):
+    if links:
+        st.markdown("**ذرائع / Sources:**")
+        for title, url in links:
+            st.markdown(f"- [{title}]({url})")
 
 
 # ---------------- IMAGE HELPERS ----------------
@@ -182,6 +299,7 @@ def image_to_bytes(image, fmt="PNG"):
 def load_uploaded_image(uploaded):
     if uploaded is None:
         return None
+
     image = Image.open(uploaded)
     return ImageOps.exif_transpose(image).convert("RGB")
 
@@ -190,13 +308,17 @@ def make_font(font_upload, size):
     if font_upload is not None:
         try:
             return ImageFont.truetype(
-                io.BytesIO(font_upload.getvalue()), size=size
+                io.BytesIO(font_upload.getvalue()),
+                size=size
             )
         except Exception:
             pass
 
     try:
-        return ImageFont.truetype("DejaVuSans.ttf", size=size)
+        return ImageFont.truetype(
+            "DejaVuSans.ttf",
+            size=size
+        )
     except Exception:
         return ImageFont.load_default()
 
@@ -204,19 +326,27 @@ def make_font(font_upload, size):
 def fit_image(image, width, height, mode):
     if mode == "Crop / Fill":
         return ImageOps.fit(
-            image, (width, height),
+            image,
+            (width, height),
             method=Image.Resampling.LANCZOS
         )
 
     resized = ImageOps.contain(
-        image, (width, height),
+        image,
+        (width, height),
         method=Image.Resampling.LANCZOS
     )
 
-    canvas = Image.new("RGB", (width, height), "#101827")
+    canvas = Image.new(
+        "RGB",
+        (width, height),
+        "#101827"
+    )
+
     x = (width - resized.width) // 2
     y = (height - resized.height) // 2
     canvas.paste(resized, (x, y))
+
     return canvas
 
 
@@ -230,16 +360,145 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.markdown("### ✨ آپ کیا کر سکتے ہیں؟")
-    st.markdown("""
-    - AI سے سوال پوچھیں
-    - تصویر اپ لوڈ کرکے سمجھیں
-    - تصویر کا سائز بدلیں
-    - YouTube بینر بنائیں
-    - تصویر پر متن لکھیں
-    - نئی AI تصویر بنانے کی کوشش کریں
-    """)
+    st.markdown("### 👤 اکاؤنٹ")
+
+    try:
+        sb = get_supabase()
+    except Exception as error:
+        sb = None
+        st.error("Supabase کنکشن میں مسئلہ ہے۔")
+        st.caption(str(error))
+
+    if sb is None:
+        st.info(
+            "Login فعال کرنے کے لیے Supabase کی "
+            "Secrets شامل کریں۔"
+        )
+
+    elif st.session_state.user is None:
+        auth_mode = st.radio(
+            "اکاؤنٹ منتخب کریں",
+            ["Login", "Sign Up"],
+            horizontal=True
+        )
+
+        email = st.text_input(
+            "ای میل",
+            key="account_email"
+        )
+
+        password = st.text_input(
+            "پاس ورڈ",
+            type="password",
+            key="account_password"
+        )
+
+        if st.button(
+            "جاری رکھیں",
+            use_container_width=True,
+            key="account_submit"
+        ):
+            if not email.strip() or len(password) < 6:
+                st.error(
+                    "درست ای میل اور کم از کم 6 حروف کا "
+                    "پاس ورڈ لکھیں۔"
+                )
+            else:
+                try:
+                    if auth_mode == "Sign Up":
+                        result = sb.auth.sign_up({
+                            "email": email.strip(),
+                            "password": password
+                        })
+
+                        if getattr(result, "user", None):
+                            st.success(
+                                "اکاؤنٹ بنانے کی درخواست مکمل ہوئی۔ "
+                                "اگر ای میل تصدیق مانگی جائے تو "
+                                "اپنا inbox چیک کریں، پھر Login کریں۔"
+                            )
+                        else:
+                            st.info(
+                                "Supabase کے جواب کو چیک کریں۔ "
+                                "ممکن ہے ای میل تصدیق درکار ہو۔"
+                            )
+
+                    else:
+                        result = sb.auth.sign_in_with_password({
+                            "email": email.strip(),
+                            "password": password
+                        })
+
+                        st.session_state.user = result.user
+                        st.success("Login کامیاب!")
+                        st.rerun()
+
+                except Exception as error:
+                    st.error(
+                        "اکاؤنٹ نہیں بن سکا یا Login ناکام ہوا۔"
+                    )
+                    st.caption(str(error))
+
+    else:
+        logged_in_email = (
+            getattr(st.session_state.user, "email", None)
+            or "Logged in"
+        )
+
+        st.success(f"Login: {logged_in_email}")
+
+        if current_plan() == "pro":
+            st.caption("موجودہ پلان: Pro")
+        else:
+            st.caption("موجودہ پلان: Free")
+
+        if st.button(
+            "Logout",
+            use_container_width=True
+        ):
+            try:
+                if sb:
+                    sb.auth.sign_out()
+            except Exception:
+                pass
+
+            st.session_state.user = None
+            st.session_state.messages = []
+            st.rerun()
+
     st.divider()
+    st.markdown("### 💳 پلان")
+
+    st.markdown("""
+**Free پلان**
+- 20 چیٹ درخواستیں
+- 10 ویب سرچ درخواستیں
+- 2 AI تصاویر
+
+**Pro پلان**
+- 200 چیٹ درخواستیں
+- 100 ویب سرچ درخواستیں
+- 30 AI تصاویر
+""")
+
+    st.caption(
+        "یہ عارضی سیشن حدود ہیں۔ حقیقی Pro ادائیگی، "
+        "خودکار اپ گریڈ اور مستقل ماہانہ کوٹہ ابھی فعال نہیں۔"
+    )
+
+    st.divider()
+    st.markdown("### ✨ آپ کیا کر سکتے ہیں؟")
+
+    st.markdown("""
+- مختلف زبانوں میں AI چیٹ
+- تصویر اپ لوڈ کرکے سمجھنا
+- انٹرنیٹ سرچ
+- AI تصویر سازی
+- تصویر کا سائز بدلنا
+- YouTube بینر بنانا
+- تصویر پر متن لکھنا
+""")
+
     st.caption("مفت ٹولز + دستیاب AI API")
 
 # ---------------- HEADER ----------------
@@ -259,11 +518,19 @@ chat_tab, editor_tab, generate_tab = st.tabs([
 ])
 
 # ==================================================
-# TAB 1: CHAT AND IMAGE UNDERSTANDING
+# TAB 1: MULTILINGUAL CHAT + WEB SEARCH
 # ==================================================
 with chat_tab:
     st.subheader("AI سے بات کریں")
-    st.caption("اردو، ہندی یا انگریزی میں سوال لکھیں۔")
+
+    st.caption(
+        "اردو، ہندی، انگریزی یا اپنی پسند کی زبان میں سوال لکھیں۔"
+    )
+
+    use_web = st.toggle(
+        "🌐 انٹرنیٹ سے تلاش کرکے جواب دیں",
+        value=False
+    )
 
     chat_image = st.file_uploader(
         "سوال کے ساتھ تصویر بھی اپ لوڈ کر سکتے ہیں",
@@ -272,94 +539,147 @@ with chat_tab:
     )
 
     if chat_image:
-        st.image(chat_image, caption="آپ کی اپ لوڈ کردہ تصویر", width=300)
+        st.image(
+            chat_image,
+            caption="آپ کی اپ لوڈ کردہ تصویر",
+            width=300
+        )
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+            show_sources(message.get("sources", []))
 
     prompt = st.chat_input("Duniya AI سے کچھ بھی پوچھیں...")
 
     if prompt:
-        st.session_state.messages.append({
-            "role": "user",
-            "content": prompt
-        })
+        feature = "web" if use_web else "chat"
 
-        with st.chat_message("user"):
-            st.markdown(prompt)
-            if chat_image:
-                st.image(chat_image, width=250)
+        if can_use(feature):
+            st.session_state.messages.append({
+                "role": "user",
+                "content": prompt
+            })
 
-        with st.chat_message("assistant"):
-            with st.spinner("جواب تیار ہو رہا ہے..."):
-                try:
-                    client = get_client()
-                    contents = []
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-                    # Include previous text messages as conversation history.
-                    for item in st.session_state.messages[:-1]:
+                if chat_image:
+                    st.image(chat_image, width=250)
+
+            with st.chat_message("assistant"):
+                with st.spinner("جواب تیار ہو رہا ہے..."):
+                    try:
+                        client = get_client()
+                        contents = []
+
+                        # Previous messages as model conversation history.
+                        for item in st.session_state.messages[:-1]:
+                            role = (
+                                "model"
+                                if item["role"] == "assistant"
+                                else "user"
+                            )
+
+                            contents.append(
+                                types.Content(
+                                    role=role,
+                                    parts=[
+                                        types.Part(
+                                            text=item["content"]
+                                        )
+                                    ]
+                                )
+                            )
+
+                        current_parts = []
+
+                        if chat_image:
+                            current_parts.append(
+                                types.Part.from_bytes(
+                                    data=chat_image.getvalue(),
+                                    mime_type=chat_image.type
+                                )
+                            )
+
+                        current_parts.append(
+                            types.Part(text=prompt)
+                        )
+
                         contents.append(
                             types.Content(
-                                role=item["role"],
-                                parts=[types.Part(text=item["content"])]
+                                role="user",
+                                parts=current_parts
                             )
                         )
 
-                    current_parts = []
-
-                    if chat_image:
-                        current_parts.append(
-                            types.Part.from_bytes(
-                                data=chat_image.getvalue(),
-                                mime_type=chat_image.type
-                            )
-                        )
-
-                    current_parts.append(types.Part(text=prompt))
-
-                    contents.append(
-                        types.Content(
-                            role="user",
-                            parts=current_parts
-                        )
-                    )
-
-                    response = client.models.generate_content(
-                        model=CHAT_MODEL,
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            system_instruction=(
+                        config_args = {
+                            "system_instruction": (
                                 "You are Duniya AI, a helpful, honest "
-                                "multilingual assistant. Reply in the user's "
-                                "language. Understand uploaded images when "
-                                "provided. Explain things clearly and "
-                                "respectfully. Do not claim to generate an "
-                                "image unless an actual image was created."
+                                "multilingual assistant. Reply in the "
+                                "user's language or the language they "
+                                "request. Understand uploaded images. "
+                                "Explain clearly and respectfully. "
+                                "Do not invent facts or sources."
+                            )
+                        }
+
+                        if use_web:
+                            config_args["tools"] = [
+                                types.Tool(
+                                    google_search=types.GoogleSearch()
+                                )
+                            ]
+
+                        response = client.models.generate_content(
+                            model=CHAT_MODEL,
+                            contents=contents,
+                            config=types.GenerateContentConfig(
+                                **config_args
                             )
                         )
-                    )
 
-                    answer = response.text or "معذرت، اس وقت جواب نہیں ملا۔"
-                    st.markdown(answer)
+                        answer = (
+                            response.text
+                            or "معذرت، اس وقت جواب نہیں ملا۔"
+                        )
 
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": answer
-                    })
+                        links = (
+                            grounding_links(response)
+                            if use_web else []
+                        )
 
-                except Exception as error:
-                    st.error("AI سے جواب لینے میں مسئلہ آیا۔")
-                    st.code(str(error))
+                        st.markdown(answer)
+                        show_sources(links)
+
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": answer,
+                            "sources": links
+                        })
+
+                        if use_web:
+                            st.session_state.web_count += 1
+                        else:
+                            st.session_state.chat_count += 1
+
+                    except Exception as error:
+                        st.error("AI سے جواب لینے میں مسئلہ آیا۔")
+                        st.caption(
+                            "API key، ماڈل کی دستیابی، کوٹہ "
+                            "اور SDK ورژن چیک کریں۔"
+                        )
+                        st.code(str(error))
 
 # ==================================================
-# TAB 2: IMAGE EDITOR
+# TAB 2: ORIGINAL IMAGE AND BANNER EDITOR
 # ==================================================
 with editor_tab:
     st.subheader("تصویر کا سائز، کراپ اور ٹیکسٹ")
+
     st.write(
-        "یہ ٹول مفت ہے۔ آپ تصویر کو بینر، تھمب نیل یا دوسری شکل میں "
-        "بدل سکتے ہیں۔"
+        "یہ ٹول مفت ہے۔ آپ تصویر کو بینر، تھمب نیل یا "
+        "دوسری شکل میں بدل سکتے ہیں۔"
     )
 
     uploaded_image = st.file_uploader(
@@ -377,7 +697,12 @@ with editor_tab:
     if uploaded_image:
         try:
             original = load_uploaded_image(uploaded_image)
-            st.image(original, caption="اصل تصویر", use_container_width=True)
+
+            st.image(
+                original,
+                caption="اصل تصویر",
+                use_container_width=True
+            )
 
             preset = st.selectbox(
                 "ڈیزائن منتخب کریں",
@@ -399,15 +724,22 @@ with editor_tab:
 
             if preset == "Custom Size":
                 c1, c2 = st.columns(2)
+
                 with c1:
                     out_width = st.number_input(
-                        "چوڑائی (pixels)", 100, 4000, 1280
+                        "چوڑائی (pixels)",
+                        100, 4000, 1280
                     )
+
                 with c2:
                     out_height = st.number_input(
-                        "اونچائی (pixels)", 100, 4000, 720
+                        "اونچائی (pixels)",
+                        100, 4000, 720
                     )
-                width, height = int(out_width), int(out_height)
+
+                width = int(out_width)
+                height = int(out_height)
+
             else:
                 width, height = presets[preset]
 
@@ -427,10 +759,18 @@ with editor_tab:
                 ["White", "Yellow", "Black", "Light Blue"]
             )
 
-            font_size = st.slider("متن کا سائز", 18, 150, 60)
+            font_size = st.slider(
+                "متن کا سائز",
+                18, 150, 60
+            )
 
-            if st.button("تصویر تیار کریں", use_container_width=True):
-                edited = fit_image(original, width, height, fit_mode)
+            if st.button(
+                "تصویر تیار کریں",
+                use_container_width=True
+            ):
+                edited = fit_image(
+                    original, width, height, fit_mode
+                )
 
                 if overlay_text.strip():
                     draw = ImageDraw.Draw(edited)
@@ -442,14 +782,11 @@ with editor_tab:
                         "Black": "#000000",
                         "Light Blue": "#93C5FD"
                     }
+
                     color = color_map[text_color]
 
-                    # Place text near the lower center with an outline.
-                    x = width // 2
-                    y = int(height * 0.82)
-
                     draw.text(
-                        (x, y),
+                        (width // 2, int(height * 0.82)),
                         overlay_text,
                         font=font,
                         fill=color,
@@ -458,14 +795,21 @@ with editor_tab:
                         stroke_fill="#111111"
                     )
 
-                st.session_state.edited_image = image_to_bytes(edited)
+                st.session_state.edited_image = image_to_bytes(
+                    edited
+                )
 
             if st.session_state.edited_image:
                 final_image = Image.open(
                     io.BytesIO(st.session_state.edited_image)
                 )
+
                 st.success("تصویر تیار ہے۔")
-                st.image(final_image, use_container_width=True)
+
+                st.image(
+                    final_image,
+                    use_container_width=True
+                )
 
                 st.download_button(
                     "⬇️ تصویر ڈاؤن لوڈ کریں",
@@ -487,9 +831,10 @@ with editor_tab:
 # ==================================================
 with generate_tab:
     st.subheader("AI سے نئی تصویر بنائیں")
+
     st.write(
-        "یہ فیچر Gemini کے image-generation ماڈل کو استعمال کرنے کی "
-        "کوشش کرے گا۔ یہ آپ کے اکاؤنٹ میں دستیاب ہونا ضروری ہے۔"
+        "اپنی تصویر کی تفصیل لکھیں۔ یہ فیچر آپ کے Gemini "
+        "API میں image model کی دستیابی پر منحصر ہے۔"
     )
 
     image_prompt = st.text_area(
@@ -501,53 +846,73 @@ with generate_tab:
         height=120
     )
 
-    if st.button("✨ تصویر بنانے کی کوشش کریں", use_container_width=True):
+    if st.button(
+        "✨ تصویر بنانے کی کوشش کریں",
+        use_container_width=True
+    ):
         if not image_prompt.strip():
             st.warning("پہلے تصویر کی تفصیل لکھیں۔")
-        else:
+
+        elif can_use("image"):
             try:
                 client = get_client()
 
-                with st.spinner("AI تصویر بنانے کی کوشش کر رہا ہے..."):
-                    response = client.models.generate_content(
+                with st.spinner("AI تصویر بنا رہا ہے..."):
+                    interaction = client.interactions.create(
                         model=IMAGE_MODEL,
-                        contents=(
+                        input=(
                             "Generate an image based on this description: "
                             + image_prompt
                         )
                     )
 
-                    generated = None
+                    output_image = getattr(
+                        interaction,
+                        "output_image",
+                        None
+                    )
 
-                    for part in (response.parts or []):
-                        if getattr(part, "inline_data", None):
-                            generated = part.as_image()
-                            break
+                    image_data = (
+                        getattr(output_image, "data", None)
+                        if output_image else None
+                    )
 
-                    if generated is None:
+                    if not image_data:
                         st.warning(
-                            "AI نے قابلِ ڈاؤن لوڈ تصویر واپس نہیں کی۔ "
-                            "ممکن ہے یہ ماڈل آپ کے اکاؤنٹ یا API کوٹے میں "
-                            "دستیاب نہ ہو۔"
+                            "API نے قابلِ ڈاؤن لوڈ تصویر واپس نہیں کی۔ "
+                            "ماڈل کی دستیابی اور API کوٹہ چیک کریں۔"
                         )
-                        if response.text:
-                            st.write(response.text)
-                    else:
-                        if not isinstance(generated, Image.Image):
-                            generated = Image.open(generated)
 
-                        generated = generated.convert("RGB")
-                        st.session_state.generated_image = image_to_bytes(
-                            generated
+                    else:
+                        raw = base64.b64decode(image_data)
+
+                        generated = Image.open(
+                            io.BytesIO(raw)
+                        ).convert("RGB")
+
+                        st.session_state.generated_image = (
+                            image_to_bytes(generated)
                         )
+
+                        st.session_state.image_count += 1
+
                         st.success("تصویر تیار ہو گئی!")
-                        st.image(generated, use_container_width=True)
+
+                        st.image(
+                            generated,
+                            use_container_width=True
+                        )
 
             except Exception as error:
                 st.error(
-                    "تصویر بنانے کی درخواست ناکام ہوئی۔ "
-                    "ممکن ہے ماڈل دستیاب نہ ہو یا مفت کوٹہ ختم ہو گیا ہو۔"
+                    "تصویر بنانے کی درخواست ناکام ہوئی۔"
                 )
+
+                st.caption(
+                    "ماڈل کا نام، API کی اجازت، کوٹہ اور "
+                    "google-genai SDK ورژن چیک کریں۔"
+                )
+
                 st.code(str(error))
 
     if st.session_state.generated_image:
