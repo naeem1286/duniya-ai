@@ -681,6 +681,134 @@ st.caption(
     "Check important information independently."
 )
 
+st.markdown("""
+<style>
+
+/* Load Jameel Noori Nastaleeq Urdu font */
+@font-face {
+    font-family: 'JameelNoori';
+    src: url('app/static/JameelNooriNastaleeq.ttf');
+    font-weight: normal;
+    font-style: normal;
+}
+
+/* Main website */
+.stApp {
+    background: linear-gradient(135deg, #07111f, #101b32);
+    color: #f5f7fb;
+}
+
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background: #0b1425;
+}
+
+/* Headings */
+h1, h2, h3, h4 {
+    color: #8ddcff;
+}
+
+/* Urdu font throughout chat and content */
+div[data-testid="stChatMessageContent"],
+div[data-testid="stMarkdownContainer"],
+.stMarkdown,
+.stText,
+[data-testid="stChatMessage"] {
+    font-family: 'JameelNoori', 'Noto Nastaliq Urdu',
+                 'Noto Naskh Arabic', serif !important;
+    line-height: 2 !important;
+}
+
+/* Chat input: dark background, white text */
+[data-testid="stChatInput"],
+[data-testid="stChatInput"] > div,
+[data-testid="stChatInput"] textarea,
+.stChatInput textarea {
+    background-color: #14233b !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    font-family: 'JameelNoori', 'Noto Nastaliq Urdu', serif !important;
+    font-size: 19px !important;
+    line-height: 1.9 !important;
+    caret-color: #ffffff !important;
+    direction: rtl;
+    text-align: right;
+}
+
+/* Input placeholder */
+[data-testid="stChatInput"] textarea::placeholder,
+.stChatInput textarea::placeholder,
+input::placeholder,
+textarea::placeholder {
+    color: #c7d4e8 !important;
+    -webkit-text-fill-color: #c7d4e8 !important;
+    opacity: 1 !important;
+}
+
+/* Other input fields */
+.stTextInput input,
+.stTextArea textarea,
+.stNumberInput input,
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea {
+    background-color: #14233b !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #ffffff !important;
+    border: 1px solid #426080 !important;
+    border-radius: 10px !important;
+    font-family: 'JameelNoori', 'Noto Nastaliq Urdu', serif !important;
+    font-size: 18px !important;
+}
+
+/* Dropdowns and selection fields */
+.stSelectbox div[data-baseweb="select"],
+.stSelectbox div[data-baseweb="select"] * {
+    color: #ffffff !important;
+}
+
+/* Buttons */
+.stButton > button,
+.stDownloadButton > button,
+button[kind="primary"] {
+    background-color: #1769aa !important;
+    color: #ffffff !important;
+    border: 1px solid #48a9e6 !important;
+    border-radius: 10px !important;
+    font-family: 'JameelNoori', 'Noto Nastaliq Urdu', serif !important;
+    font-size: 17px !important;
+    min-height: 42px;
+}
+
+/* Chat message cards */
+div[data-testid="stChatMessage"] {
+    background: #101e33;
+    border: 1px solid #253957;
+    border-radius: 14px;
+    padding: 12px;
+}
+
+/* General text */
+p, label, li {
+    font-family: 'JameelNoori', 'Noto Nastaliq Urdu', serif;
+    line-height: 1.9;
+}
+
+/* Keep English code readable */
+code, pre {
+    font-family: monospace !important;
+    direction: ltr;
+    text-align: left;
+}
+
+.small-note {
+    color: #b5c3d8;
+    font-size: 13px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
 
 
 
