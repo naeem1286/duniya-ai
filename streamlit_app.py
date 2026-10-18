@@ -1,160 +1,88 @@
 
-import io
 import os
+import io
+import base64
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont
 from google import genai
 from google.genai import types
 
-# ---------------- SETTINGS ----------------
+
+# ------------------------------------------
+# DUNIYA AI - MAIN CONFIGURATION
+# ------------------------------------------
+
 st.set_page_config(
     page_title="Duniya AI",
     page_icon="🌍",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-CHAT_MODEL = "gemini-3.8-flash"
-IMAGE_MODEL = "gemini-nano-banana-2.1"
+CHAT_MODEL = os.getenv(
+    "GEMINI_CHAT_MODEL", "gemini-3.8-flash"
+)
+IMAGE_MODEL = os.getenv(
+    "GEMINI_IMAGE_MODEL", "gemini-nano-banana-2.1"
+)
 
-# ---------------- DESIGN ----------------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu&display=swap');
-
-:root {
-    --urdu: "Jameel Noori Nastaleeq", "Noto Nastaliq Urdu", serif;
-    --latin: "Inter", Arial, sans-serif;
-}
-
 .stApp {
-    background: #0b1020;
-    color: #f8fafc;
-    font-family: var(--latin), var(--urdu);
+    background: linear-gradient(135deg, #07111f, #101b32);
+    color: #f5f7fb;
 }
-
-[data-testid="stHeader"] {
-    background: #0b1020;
+section[data-testid="stSidebar"] {
+    background: #0b1425;
 }
-
-.block-container {
-    max-width: 1100px;
-    padding-top: 1.5rem;
-    padding-bottom: 3rem;
+h1, h2, h3 {
+    color: #8ddcff;
 }
-
-[data-testid="stSidebar"] {
-    background: #10192a;
-    border-right: 1px solid #334155;
+div[data-testid="stChatMessage"] {
+    border: 1px solid #253957;
+    border-radius: 14px;
+    padding: 12px;
 }
-
-h1, h2, h3, p, label, li {
-    color: #f8fafc;
-}
-
-.hero {
-    background: linear-gradient(135deg, #17243e, #30234b);
-    border: 1px solid #3b4b70;
-    border-radius: 22px;
-    padding: 26px 18px;
-    margin-bottom: 20px;
-    text-align: center;
-}
-
-.hero-title {
-    font-family: var(--latin);
-    font-size: 38px;
-    font-weight: 800;
-    color: white;
-}
-
-.hero-subtitle {
-    font-family: var(--urdu);
-    font-size: 22px;
-    line-height: 2.1;
-    color: #e2e8f0;
-}
-
-.stButton > button,
-.stDownloadButton > button {
-    background: #1c2b43;
-    color: #ffffff !important;
-    border: 1px solid #475b79;
-    border-radius: 12px;
+.stButton > button {
+    border-radius: 10px;
+    border: 1px solid #2d86b9;
     min-height: 42px;
 }
-
-.stButton > button:hover,
-.stDownloadButton > button:hover {
-    background: #2b4161;
-    border-color: #93c5fd;
-    color: white !important;
-}
-
-/* Fix typing box: dark background, visible white text */
-[data-testid="stChatInput"] {
-    background-color: #111827 !important;
-    border: 1px solid #64748b !important;
-    border-radius: 16px !important;
-}
-
-[data-testid="stChatInput"] textarea,
-[data-testid="stChatInput"] textarea:focus {
-    background-color: #111827 !important;
-    color: #ffffff !important;
-    -webkit-text-fill-color: #ffffff !important;
-    caret-color: #ffffff !important;
-    font-family: var(--urdu) !important;
-    font-size: 18px !important;
-    line-height: 2.1 !important;
-    opacity: 1 !important;
-}
-
-[data-testid="stChatInput"] textarea::placeholder {
-    color: #cbd5e1 !important;
-    -webkit-text-fill-color: #cbd5e1 !important;
-    opacity: 1 !important;
-}
-
-[data-testid="stChatMessage"] {
-    background: #111827;
-    border: 1px solid #283650;
-    border-radius: 15px;
-    padding: 12px;
-    margin-bottom: 10px;
-}
-
-[data-testid="stChatMessage"] p {
-    color: #ffffff;
-    font-family: var(--urdu), var(--latin);
-    font-size: 17px;
-    line-height: 2;
-}
-
-.stTextInput input,
-.stTextArea textarea,
-.stSelectbox div[data-baseweb="select"] {
-    background-color: #111827 !important;
-    color: #ffffff !important;
-}
-
-.footer {
-    color: #94a3b8;
-    text-align: center;
-    font-size: 12px;
-    padding-top: 25px;
+.small-note {
+    color: #b5c3d8;
+    font-size: 13px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- API KEY ----------------
-try:
-    API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-except Exception:
-    API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-API_KEY = API_KEY.strip() if API_KEY else ""
+# ------------------------------------------
+# API KEY AND CLIENT
+# ------------------------------------------
 
-# ---------------- SESSION STATE ----------------
+def get_api_key():
+    try:
+        key = st.secrets.get("GEMINI_API_KEY", "")
+        if key:
+            return key
+    except Exception:
+        pass
+
+    return os.getenv("GEMINI_API_KEY", "")
+
+
+API_KEY = get_api_key()
+
+if API_KEY:
+    client = genai.Client(api_key=API_KEY)
+else:
+    client = None
+
+
+# ------------------------------------------
+# SESSION STATE
+# ------------------------------------------
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -164,408 +92,595 @@ if "generated_image" not in st.session_state:
 if "edited_image" not in st.session_state:
     st.session_state.edited_image = None
 
-# ---------------- CLIENT ----------------
-def get_client():
-    if not API_KEY:
-        raise ValueError(
-            "GEMINI_API_KEY نہیں ملی۔ Streamlit Settings → Secrets چیک کریں۔"
-        )
-    return genai.Client(api_key=API_KEY)
 
+# ------------------------------------------
+# HELPER FUNCTIONS
+# ------------------------------------------
 
-# ---------------- IMAGE HELPERS ----------------
 def image_to_bytes(image, fmt="PNG"):
-    buffer = io.BytesIO()
-    image.save(buffer, format=fmt)
-    return buffer.getvalue()
+    output = io.BytesIO()
+    image.save(output, format=fmt)
+    return output.getvalue()
 
 
-def load_uploaded_image(uploaded):
-    if uploaded is None:
-        return None
-    image = Image.open(uploaded)
-    return ImageOps.exif_transpose(image).convert("RGB")
+def load_font(size):
+    candidates = [
+        "DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+    ]
 
-
-def make_font(font_upload, size):
-    if font_upload is not None:
+    for path in candidates:
         try:
-            return ImageFont.truetype(
-                io.BytesIO(font_upload.getvalue()), size=size
-            )
+            return ImageFont.truetype(path, size)
         except Exception:
-            pass
+            continue
+
+    return ImageFont.load_default()
+
+
+def make_client_ready():
+    if not client:
+        st.error(
+            "GEMINI_API_KEY نہیں ملی۔ "
+            "Streamlit Settings → Secrets میں API key چیک کریں۔"
+        )
+        return False
+    return True
+
+
+def get_image_from_upload(uploaded_file):
+    if uploaded_file is None:
+        return None
 
     try:
-        return ImageFont.truetype("DejaVuSans.ttf", size=size)
+        return Image.open(uploaded_file).convert("RGB")
     except Exception:
-        return ImageFont.load_default()
+        st.error("یہ تصویر کھولی نہیں جا سکی۔ دوسری تصویر آزمائیں۔")
+        return None
 
 
-def fit_image(image, width, height, mode):
-    if mode == "Crop / Fill":
-        return ImageOps.fit(
-            image, (width, height),
-            method=Image.Resampling.LANCZOS
-        )
+# ------------------------------------------
+# SIDEBAR
+# ------------------------------------------
 
-    resized = ImageOps.contain(
-        image, (width, height),
-        method=Image.Resampling.LANCZOS
+with st.sidebar:
+    st.title("🌍 Duniya AI")
+    st.caption("Your AI assistant")
+
+    st.markdown("---")
+    st.subheader("Settings")
+
+    response_language = st.selectbox(
+        "جواب کی زبان / Response language",
+        [
+            "User's language",
+            "Urdu",
+            "English",
+            "Hindi",
+            "Arabic",
+            "Roman Urdu",
+        ],
+        index=0,
     )
 
-    canvas = Image.new("RGB", (width, height), "#101827")
-    x = (width - resized.width) // 2
-    y = (height - resized.height) // 2
-    canvas.paste(resized, (x, y))
-    return canvas
+    use_web_search = st.checkbox(
+        "Use Google Search for current information",
+        value=False,
+        help="Search may have usage limits or charges depending on your Google project.",
+    )
 
-
-# ---------------- SIDEBAR ----------------
-with st.sidebar:
-    st.markdown("## 🌍 Duniya AI")
-    st.caption("آپ کا اپنا AI اسسٹنٹ")
-
-    if st.button("＋ نئی چیٹ", use_container_width=True):
+    if st.button("🗑️ Clear chat", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
-    st.divider()
-    st.markdown("### ✨ آپ کیا کر سکتے ہیں؟")
-    st.markdown("""
-    - AI سے سوال پوچھیں
-    - تصویر اپ لوڈ کرکے سمجھیں
-    - تصویر کا سائز بدلیں
-    - YouTube بینر بنائیں
-    - تصویر پر متن لکھیں
-    - نئی AI تصویر بنانے کی کوشش کریں
-    """)
-    st.divider()
-    st.caption("مفت ٹولز + دستیاب AI API")
+    st.markdown("---")
+    st.markdown("**Available features**")
+    st.write("💬 AI Chat")
+    st.write("🖼️ Image Questions")
+    st.write("🎨 AI Image Generation")
+    st.write("✏️ Image Editor")
 
-# ---------------- HEADER ----------------
-st.markdown("""
-<div class="hero">
-    <div class="hero-title">🌍 Duniya AI</div>
-    <div class="hero-subtitle">
-        آپ کا اپنا ذہین اسسٹنٹ — چیٹ، تصاویر اور ڈیزائن
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-chat_tab, editor_tab, generate_tab = st.tabs([
-    "💬 AI چیٹ",
-    "🖼️ تصویر اور بینر ایڈیٹر",
-    "✨ نئی AI تصویر"
-])
-
-# ==================================================
-# TAB 1: CHAT AND IMAGE UNDERSTANDING
-# ==================================================
-with chat_tab:
-    st.subheader("AI سے بات کریں")
-    st.caption("اردو، ہندی یا انگریزی میں سوال لکھیں۔")
-
-    chat_image = st.file_uploader(
-        "سوال کے ساتھ تصویر بھی اپ لوڈ کر سکتے ہیں",
-        type=["png", "jpg", "jpeg", "webp"],
-        key="chat_image"
+    st.markdown("---")
+    st.markdown(
+        '<p class="small-note">Duniya AI is an independent project. '
+        'AI answers can contain mistakes.</p>',
+        unsafe_allow_html=True,
     )
 
-    if chat_image:
-        st.image(chat_image, caption="آپ کی اپ لوڈ کردہ تصویر", width=300)
+
+# ------------------------------------------
+# HEADER
+# ------------------------------------------
+
+st.title("🌍 Duniya AI")
+st.markdown(
+    "### آپ کا AI اسسٹنٹ — سوال پوچھیں، تصاویر سمجھیں، اور نئی تصاویر بنائیں"
+)
+
+if not client:
+    st.warning(
+        "AI استعمال کرنے کے لیے Streamlit Secrets میں "
+        "`GEMINI_API_KEY` سیٹ ہونا ضروری ہے۔"
+    )
+
+
+# ------------------------------------------
+# MAIN TABS
+# ------------------------------------------
+
+chat_tab, editor_tab, image_tab = st.tabs(
+    ["💬 AI Chat", "✏️ Image Editor", "🎨 AI Image Generator"]
+)
+
+
+# ==========================================
+# TAB 1: CHAT
+# ==========================================
+
+with chat_tab:
+    st.subheader("AI Chat Assistant")
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    prompt = st.chat_input("Duniya AI سے کچھ بھی پوچھیں...")
+            if message.get("image") is not None:
+                st.image(
+                    message["image"],
+                    caption="Uploaded image",
+                    use_container_width=True,
+                )
+
+    uploaded_question_image = st.file_uploader(
+        "تصویر اپلوڈ کریں (اختیاری)",
+        type=["png", "jpg", "jpeg", "webp"],
+        key="chat_upload",
+    )
+
+    prompt = st.chat_input("اپنا سوال یہاں لکھیں...")
 
     if prompt:
+        if not make_client_ready():
+            st.stop()
+
+        uploaded_image = get_image_from_upload(
+            uploaded_question_image
+        )
+
         st.session_state.messages.append({
             "role": "user",
-            "content": prompt
+            "content": prompt,
+            "image": uploaded_image,
         })
 
         with st.chat_message("user"):
             st.markdown(prompt)
-            if chat_image:
-                st.image(chat_image, width=250)
+            if uploaded_image is not None:
+                st.image(
+                    uploaded_image,
+                    use_container_width=True,
+                )
 
         with st.chat_message("assistant"):
-            with st.spinner("جواب تیار ہو رہا ہے..."):
-                try:
-                    client = get_client()
-                    contents = []
+            answer_placeholder = st.empty()
 
-                    # Include previous text messages as conversation history.
-                    for item in st.session_state.messages[:-1]:
-                        contents.append(
-                            types.Content(
-                                role=item["role"],
-                                parts=[types.Part(text=item["content"])]
-                            )
-                        )
+            language_instruction = {
+                "User's language":
+                    "Reply in the same language the user uses.",
+                "Urdu":
+                    "Reply in clear, simple Urdu.",
+                "English":
+                    "Reply in English.",
+                "Hindi":
+                    "Reply in Hindi.",
+                "Arabic":
+                    "Reply in Arabic.",
+                "Roman Urdu":
+                    "Reply in Roman Urdu using Latin letters.",
+            }.get(response_language, "Reply in the user's language.")
 
-                    current_parts = []
-
-                    if chat_image:
-                        current_parts.append(
-                            types.Part.from_bytes(
-                                data=chat_image.getvalue(),
-                                mime_type=chat_image.type
-                            )
-                        )
-
-                    current_parts.append(types.Part(text=prompt))
-
-                    contents.append(
-                        types.Content(
-                            role="user",
-                            parts=current_parts
-                        )
-                    )
-
-                    response = client.models.generate_content(
-                        model=CHAT_MODEL,
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            system_instruction=(
-                                "You are Duniya AI, a helpful, honest "
-                                "multilingual assistant. Reply in the user's "
-                                "language. Understand uploaded images when "
-                                "provided. Explain things clearly and "
-                                "respectfully. Do not claim to generate an "
-                                "image unless an actual image was created."
-                            )
-                        )
-                    )
-
-                    answer = response.text or "معذرت، اس وقت جواب نہیں ملا۔"
-                    st.markdown(answer)
-
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": answer
-                    })
-
-                except Exception as error:
-                    st.error("AI سے جواب لینے میں مسئلہ آیا۔")
-                    st.code(str(error))
-
-# ==================================================
-# TAB 2: IMAGE EDITOR
-# ==================================================
-with editor_tab:
-    st.subheader("تصویر کا سائز، کراپ اور ٹیکسٹ")
-    st.write(
-        "یہ ٹول مفت ہے۔ آپ تصویر کو بینر، تھمب نیل یا دوسری شکل میں "
-        "بدل سکتے ہیں۔"
-    )
-
-    uploaded_image = st.file_uploader(
-        "اپنے کمپیوٹر سے تصویر منتخب کریں",
-        type=["png", "jpg", "jpeg", "webp"],
-        key="editor_image"
-    )
-
-    font_upload = st.file_uploader(
-        "اختیاری: جمیل نوری نستعلیق کا TTF/OTF فونٹ اپ لوڈ کریں",
-        type=["ttf", "otf"],
-        key="urdu_font"
-    )
-
-    if uploaded_image:
-        try:
-            original = load_uploaded_image(uploaded_image)
-            st.image(original, caption="اصل تصویر", use_container_width=True)
-
-            preset = st.selectbox(
-                "ڈیزائن منتخب کریں",
-                [
-                    "YouTube Banner (2560×1440)",
-                    "YouTube Thumbnail (1280×720)",
-                    "YouTube Shorts (1080×1920)",
-                    "Square Post (1080×1080)",
-                    "Custom Size"
-                ]
+            system_instruction = (
+                "You are Duniya AI, a helpful, respectful, "
+                "multilingual AI assistant. "
+                "Give clear, accurate, useful answers. "
+                "Explain technical tasks step by step for beginners. "
+                "Be honest when uncertain and never invent sources. "
+                + language_instruction
             )
 
-            presets = {
-                "YouTube Banner (2560×1440)": (2560, 1440),
-                "YouTube Thumbnail (1280×720)": (1280, 720),
-                "YouTube Shorts (1080×1920)": (1080, 1920),
-                "Square Post (1080×1080)": (1080, 1080)
-            }
+            contents = []
 
-            if preset == "Custom Size":
-                c1, c2 = st.columns(2)
-                with c1:
-                    out_width = st.number_input(
-                        "چوڑائی (pixels)", 100, 4000, 1280
+            for old_message in st.session_state.messages[:-1]:
+                contents.append({
+                    "role": (
+                        "model" if old_message["role"] == "assistant"
+                        else "user"
+                    ),
+                    "parts": [{"text": old_message["content"]}],
+                })
+
+            current_parts = [{"text": prompt}]
+
+            if uploaded_image is not None:
+                current_parts.append(
+                    types.Part.from_bytes(
+                        data=image_to_bytes(uploaded_image),
+                        mime_type="image/png",
                     )
-                with c2:
-                    out_height = st.number_input(
-                        "اونچائی (pixels)", 100, 4000, 720
-                    )
-                width, height = int(out_width), int(out_height)
-            else:
-                width, height = presets[preset]
-
-            fit_mode = st.radio(
-                "تصویر کیسے فٹ ہو؟",
-                ["Crop / Fill", "Contain / پوری تصویر"],
-                horizontal=True
-            )
-
-            overlay_text = st.text_input(
-                "تصویر پر لکھنے کے لیے متن (اختیاری)",
-                placeholder="مثلاً Duniya AI"
-            )
-
-            text_color = st.selectbox(
-                "متن کا رنگ",
-                ["White", "Yellow", "Black", "Light Blue"]
-            )
-
-            font_size = st.slider("متن کا سائز", 18, 150, 60)
-
-            if st.button("تصویر تیار کریں", use_container_width=True):
-                edited = fit_image(original, width, height, fit_mode)
-
-                if overlay_text.strip():
-                    draw = ImageDraw.Draw(edited)
-                    font = make_font(font_upload, font_size)
-
-                    color_map = {
-                        "White": "#FFFFFF",
-                        "Yellow": "#FFE66D",
-                        "Black": "#000000",
-                        "Light Blue": "#93C5FD"
-                    }
-                    color = color_map[text_color]
-
-                    # Place text near the lower center with an outline.
-                    x = width // 2
-                    y = int(height * 0.82)
-
-                    draw.text(
-                        (x, y),
-                        overlay_text,
-                        font=font,
-                        fill=color,
-                        anchor="mm",
-                        stroke_width=max(1, font_size // 18),
-                        stroke_fill="#111111"
-                    )
-
-                st.session_state.edited_image = image_to_bytes(edited)
-
-            if st.session_state.edited_image:
-                final_image = Image.open(
-                    io.BytesIO(st.session_state.edited_image)
                 )
-                st.success("تصویر تیار ہے۔")
-                st.image(final_image, use_container_width=True)
+
+            contents.append({
+                "role": "user",
+                "parts": current_parts,
+            })
+
+            try:
+                config_args = {
+                    "system_instruction": system_instruction,
+                    "temperature": 0.7,
+                }
+
+                if use_web_search:
+                    config_args["tools"] = [
+                        types.Tool(
+                            google_search=types.GoogleSearch()
+                        )
+                    ]
+
+                response = client.models.generate_content(
+                    model=CHAT_MODEL,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        **config_args
+                    ),
+                )
+
+                answer = response.text or (
+                    "معذرت، اس سوال کا جواب تیار نہیں ہو سکا۔"
+                )
+
+                answer_placeholder.markdown(answer)
+
+                # Show available grounding sources if provided.
+                grounding = getattr(
+                    getattr(response, "candidates", [None])[0],
+                    "grounding_metadata",
+                    None,
+                ) if getattr(response, "candidates", None) else None
+
+                if grounding:
+                    chunks = getattr(
+                        grounding, "grounding_chunks", []
+                    ) or []
+
+                    source_links = []
+                    for chunk in chunks:
+                        web_item = getattr(chunk, "web", None)
+                        if web_item:
+                            uri = getattr(web_item, "uri", None)
+                            title = getattr(web_item, "title", None)
+                            if uri:
+                                source_links.append(
+                                    (title or uri, uri)
+                                )
+
+                    if source_links:
+                        with st.expander("Web sources"):
+                            for title, uri in source_links:
+                                st.markdown(f"- [{title}]({uri})")
+
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": answer,
+                })
+
+            except Exception as exc:
+                st.error(
+                    "AI سے جواب حاصل نہیں ہو سکا۔ "
+                    "API key، model access اور deployment logs چیک کریں۔"
+                )
+                st.caption(f"Technical details: {exc}")
+
+
+# ==========================================
+# TAB 2: IMAGE EDITOR
+# ==========================================
+
+with editor_tab:
+    st.subheader("Image Editor")
+
+    editor_upload = st.file_uploader(
+        "اپنی تصویر اپلوڈ کریں",
+        type=["png", "jpg", "jpeg", "webp"],
+        key="editor_upload",
+    )
+
+    if editor_upload:
+        original_image = get_image_from_upload(editor_upload)
+
+        if original_image:
+            left, right = st.columns(2)
+
+            with left:
+                st.image(
+                    original_image,
+                    caption="Original image",
+                    use_container_width=True,
+                )
+
+            with right:
+                st.markdown("**Image settings**")
+
+                width = st.number_input(
+                    "Width (pixels)",
+                    min_value=100,
+                    max_value=4096,
+                    value=min(original_image.width, 1280),
+                    step=100,
+                )
+
+                height = st.number_input(
+                    "Height (pixels)",
+                    min_value=100,
+                    max_value=4096,
+                    value=min(original_image.height, 1280),
+                    step=100,
+                )
+
+                crop_square = st.checkbox(
+                    "Crop to square",
+                    value=False,
+                )
+
+                overlay_text = st.text_input(
+                    "تصویر پر ٹیکسٹ (اختیاری)"
+                )
+
+                text_position = st.selectbox(
+                    "Text position",
+                    ["Bottom", "Top", "Center"],
+                )
+
+                text_size = st.slider(
+                    "Text size",
+                    min_value=12,
+                    max_value=100,
+                    value=36,
+                )
+
+                text_color = st.selectbox(
+                    "Text color",
+                    ["White", "Yellow", "Black"],
+                )
+
+                if st.button(
+                    "Apply changes",
+                    use_container_width=True,
+                ):
+                    result_image = original_image.copy()
+
+                    if crop_square:
+                        side = min(
+                            result_image.width,
+                            result_image.height,
+                        )
+                        x = (result_image.width - side) // 2
+                        y = (result_image.height - side) // 2
+                        result_image = result_image.crop(
+                            (x, y, x + side, y + side)
+                        )
+
+                    result_image = result_image.resize(
+                        (int(width), int(height)),
+                        Image.Resampling.LANCZOS,
+                    )
+
+                    if overlay_text.strip():
+                        draw = ImageDraw.Draw(result_image)
+                        font = load_font(int(text_size))
+
+                        bbox = draw.textbbox(
+                            (0, 0),
+                            overlay_text,
+                            font=font,
+                        )
+
+                        text_width = bbox[2] - bbox[0]
+                        text_height = bbox[3] - bbox[1]
+
+                        margin = 20
+                        x = max(
+                            margin,
+                            (result_image.width - text_width) // 2,
+                        )
+
+                        if text_position == "Top":
+                            y = margin
+                        elif text_position == "Center":
+                            y = (
+                                result_image.height - text_height
+                            ) // 2
+                        else:
+                            y = (
+                                result_image.height
+                                - text_height
+                                - margin
+                            )
+
+                        colors = {
+                            "White": (255, 255, 255),
+                            "Yellow": (255, 220, 0),
+                            "Black": (0, 0, 0),
+                        }
+
+                        # Dark outline improves readability.
+                        draw.text(
+                            (x, y),
+                            overlay_text,
+                            font=font,
+                            fill=colors[text_color],
+                            stroke_width=2,
+                            stroke_fill=(0, 0, 0),
+                        )
+
+                    st.session_state.edited_image = result_image
+
+            if st.session_state.edited_image is not None:
+                st.markdown("---")
+                st.subheader("Edited result")
+                st.image(
+                    st.session_state.edited_image,
+                    use_container_width=True,
+                )
 
                 st.download_button(
-                    "⬇️ تصویر ڈاؤن لوڈ کریں",
-                    data=st.session_state.edited_image,
-                    file_name="duniya_ai_design.png",
+                    "⬇️ Download edited image",
+                    data=image_to_bytes(
+                        st.session_state.edited_image
+                    ),
+                    file_name="duniya_ai_edited.png",
                     mime="image/png",
-                    use_container_width=True
+                    use_container_width=True,
                 )
 
-        except Exception as error:
-            st.error("تصویر تیار نہیں ہو سکی۔")
-            st.code(str(error))
 
-    else:
-        st.info("ایڈیٹنگ شروع کرنے کے لیے پہلے تصویر اپ لوڈ کریں۔")
+# ==========================================
+# TAB 3: AI IMAGE GENERATOR
+# ==========================================
 
-# ==================================================
-# TAB 3: AI IMAGE GENERATION
-# ==================================================
-with generate_tab:
-    st.subheader("AI سے نئی تصویر بنائیں")
+with image_tab:
+    st.subheader("AI Image Generator")
+
     st.write(
-        "یہ فیچر Gemini کے image-generation ماڈل کو استعمال کرنے کی "
-        "کوشش کرے گا۔ یہ آپ کے اکاؤنٹ میں دستیاب ہونا ضروری ہے۔"
+        "اپنی تصویر کی تفصیل لکھیں۔ دستیاب ماڈل اور اکاؤنٹ کی "
+        "اجازت کے مطابق AI تصویر بنانے کی کوشش کرے گا۔"
     )
 
     image_prompt = st.text_area(
-        "آپ کیسی تصویر چاہتے ہیں؟",
+        "Describe the image you want",
         placeholder=(
-            "مثلاً: پاکستان کے خوبصورت پہاڑ، نیلا آسمان، "
-            "سنیما جیسا منظر، اعلیٰ معیار کی ڈیجیٹل آرٹ"
+            "Example: A beautiful futuristic city at night, "
+            "cinematic lighting, realistic details..."
         ),
-        height=120
+        height=120,
+        key="image_prompt",
     )
 
-    if st.button("✨ تصویر بنانے کی کوشش کریں", use_container_width=True):
+    aspect_ratio = st.selectbox(
+        "Image aspect ratio",
+        ["1:1", "16:9", "9:16", "4:3", "3:4"],
+        index=1,
+    )
+
+    image_style = st.selectbox(
+        "Image style",
+        [
+            "Realistic",
+            "Cinematic",
+            "Digital art",
+            "Anime",
+            "Minimalist",
+            "Product photography",
+        ],
+    )
+
+    generate_clicked = st.button(
+        "✨ Generate image",
+        type="primary",
+        use_container_width=True,
+    )
+
+    if generate_clicked:
+        if not make_client_ready():
+            st.stop()
+
         if not image_prompt.strip():
             st.warning("پہلے تصویر کی تفصیل لکھیں۔")
         else:
-            try:
-                client = get_client()
+            full_prompt = (
+                f"{image_prompt.strip()}. "
+                f"Style: {image_style}. "
+                "Create a high-quality image. "
+                "Avoid unnecessary text, logos, and watermarks."
+            )
 
-                with st.spinner("AI تصویر بنانے کی کوشش کر رہا ہے..."):
-                    response = client.models.generate_content(
+            with st.spinner("AI تصویر بنا رہا ہے..."):
+                try:
+                    result = client.interactions.create(
                         model=IMAGE_MODEL,
-                        contents=(
-                            "Generate an image based on this description: "
-                            + image_prompt
-                        )
+                        input=full_prompt,
+                        response_format={
+                            "type": "image",
+                            "mime_type": "image/png",
+                            "aspect_ratio": aspect_ratio,
+                        },
                     )
 
-                    generated = None
+                    output_image = getattr(
+                        result, "output_image", None
+                    )
 
-                    for part in (response.parts or []):
-                        if getattr(part, "inline_data", None):
-                            generated = part.as_image()
-                            break
+                    if output_image is not None:
+                        image_data = output_image.data
 
-                    if generated is None:
-                        st.warning(
-                            "AI نے قابلِ ڈاؤن لوڈ تصویر واپس نہیں کی۔ "
-                            "ممکن ہے یہ ماڈل آپ کے اکاؤنٹ یا API کوٹے میں "
-                            "دستیاب نہ ہو۔"
-                        )
-                        if response.text:
-                            st.write(response.text)
+                        if isinstance(image_data, str):
+                            image_bytes = base64.b64decode(
+                                image_data
+                            )
+                        else:
+                            image_bytes = image_data
+
+                        generated = Image.open(
+                            io.BytesIO(image_bytes)
+                        ).convert("RGB")
+
+                        st.session_state.generated_image = generated
+
                     else:
-                        if not isinstance(generated, Image.Image):
-                            generated = Image.open(generated)
-
-                        generated = generated.convert("RGB")
-                        st.session_state.generated_image = image_to_bytes(
-                            generated
+                        st.error(
+                            "ماڈل نے تصویر واپس نہیں کی۔ "
+                            "Image model کی API documentation "
+                            "اور access چیک کریں۔"
                         )
-                        st.success("تصویر تیار ہو گئی!")
-                        st.image(generated, use_container_width=True)
 
-            except Exception as error:
-                st.error(
-                    "تصویر بنانے کی درخواست ناکام ہوئی۔ "
-                    "ممکن ہے ماڈل دستیاب نہ ہو یا مفت کوٹہ ختم ہو گیا ہو۔"
-                )
-                st.code(str(error))
+                except Exception as exc:
+                    st.error(
+                        "تصویر نہیں بن سکی۔ ممکن ہے ماڈل کا نام، "
+                        "اکاؤنٹ کی اجازت یا SDK ورژن مسئلہ ہو۔"
+                    )
+                    st.caption(f"Technical details: {exc}")
 
-    if st.session_state.generated_image:
-        st.download_button(
-            "⬇️ AI تصویر ڈاؤن لوڈ کریں",
-            data=st.session_state.generated_image,
-            file_name="duniya_ai_generated.png",
-            mime="image/png",
-            use_container_width=True
+    if st.session_state.generated_image is not None:
+        st.markdown("---")
+        st.subheader("Generated image")
+
+        st.image(
+            st.session_state.generated_image,
+            use_container_width=True,
         )
 
-# ---------------- FOOTER ----------------
-st.markdown("""
-<div class="footer">
-Duniya AI — AI کے جوابات میں غلطی ممکن ہے۔ اہم معلومات کی تصدیق کریں۔
-</div>
-""", unsafe_allow_html=True)
+        st.download_button(
+            "⬇️ Download generated image",
+            data=image_to_bytes(
+                st.session_state.generated_image
+            ),
+            file_name="duniya_ai_generated.png",
+            mime="image/png",
+            use_container_width=True,
+        )
+
+
+# ------------------------------------------
+# FOOTER
+# ------------------------------------------
+
+st.markdown("---")
+st.caption(
+    "Duniya AI • AI responses may be inaccurate. "
+    "Check important information independently."
+)
+
 
 
 
